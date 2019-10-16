@@ -1,6 +1,9 @@
 package com.coolweather.android;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.view.GravityCompat;
+import androidx.drawerlayout.widget.DrawerLayout;
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -8,8 +11,10 @@ import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -43,6 +48,10 @@ public class WeatherActivity extends AppCompatActivity {
     private TextView carWashText;
     private TextView sportText;
     private ImageView bingPicImg;
+    public SwipeRefreshLayout swipeRefreshLayout;
+    private String mWeatherId;
+    public DrawerLayout drawerLayout;
+    private Button navButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -67,16 +76,23 @@ public class WeatherActivity extends AppCompatActivity {
         carWashText = findViewById(R.id.car_wash_text);
         sportText = findViewById(R.id.sport_text);
         bingPicImg = findViewById(R.id.bing_pic_img);
+        swipeRefreshLayout = (SwipeRefreshLayout) findViewById(R.id.swipe_refresh);
+        drawerLayout = (DrawerLayout) findViewById(R.id.drawer_layout);
+        navButton = findViewById(R.id.nav_button);
+        //设置下拉刷新进度条的颜色
+        swipeRefreshLayout.setColorSchemeResources(R.color.colorPrimary);
         //查看是否有缓存的天气数据
         SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
         String weatherString = sharedPreferences.getString("weather",null);
         if (weatherString!=null){
             Weather weather = Utility.handleWeatherResponse(weatherString);
+            //保存weatherId用于下拉刷新时请求数据
+            mWeatherId = weather.basic.weatherId;
             showWeatherInfo(weather);
         }else {
-            String weatherId = getIntent().getStringExtra("weather_id");
+            mWeatherId = getIntent().getStringExtra("weather_id");
             weatherLayout.setVisibility(View.INVISIBLE);
-            requestWeather(weatherId);
+            requestWeather(mWeatherId);
         }
         //查看是否保存了背景图的链接
         String bingPic = sharedPreferences.getString("bing_pic",null);
@@ -85,6 +101,20 @@ public class WeatherActivity extends AppCompatActivity {
         }else{
             loadBingPic();
         }
+        //下拉刷新监听器
+        swipeRefreshLayout.setOnRefreshListener(new SwipeRefreshLayout.OnRefreshListener() {
+            @Override
+            public void onRefresh() {
+                requestWeather(mWeatherId);
+            }
+        });
+        //选择城市按键监听器
+        navButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                drawerLayout.openDrawer(GravityCompat.START);
+            }
+        });
     }
 
     /**
@@ -123,13 +153,18 @@ public class WeatherActivity extends AppCompatActivity {
     /**
      * 根据weather_id查询天气数据
      */
-    private void requestWeather(String weatherId) {
+    public void requestWeather(String weatherId) {
+        // 在选择新城市后，weatherId会改变，所以也要改变mWeatherId，这样后面下拉刷新时才不会出错
+        mWeatherId = weatherId;
+        Log.d("weatherId",weatherId);
         String weatherUrl = "http://guolin.tech/api/weather?cityid="
                 + weatherId + "&key=5db8b9d954574824b64cfc8d174afcd4";
         HttpUtil.sendOkHttpRequest(weatherUrl, new Callback() {
             @Override
             public void onFailure(@NotNull Call call, @NotNull IOException e) {
                 Toast.makeText(WeatherActivity.this,"获取天气信息失败",Toast.LENGTH_SHORT).show();
+                //表示刷新事件结束，隐藏刷新进度条
+                swipeRefreshLayout.setRefreshing(false);
             }
 
             @Override
@@ -151,6 +186,8 @@ public class WeatherActivity extends AppCompatActivity {
                         }else {
                             Toast.makeText(WeatherActivity.this,"获取天气信息失败",Toast.LENGTH_SHORT).show();
                         }
+                        //表示刷新事件结束，隐藏刷新进度条
+                        swipeRefreshLayout.setRefreshing(false);
                     }
                 });
             }
